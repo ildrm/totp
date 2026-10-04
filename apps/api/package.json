@@ -1,0 +1,31 @@
+{
+  "name": "@still/api",
+  "version": "1.0.0",
+  "private": true,
+  "license": "GPL-2.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/apps/api/src/main.js",
+    "migrate": "node migrate.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "3.1145.0",
+    "@nestjs/common": "12.1.2",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-express": "12.1.2",
+    "@scure/base": "2.4.0",
+    "@simplewebauthn/server": "14.0.3",
+    "@still/core": "workspace:*",
+    "express": "5.2.1",
+    "hash-wasm": "4.12.0",
+    "helmet": "8.3.0",
+    "papaparse": "5.7.0",
+    "pg": "8.23.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  }
+}

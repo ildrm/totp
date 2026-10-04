@@ -1,0 +1,85 @@
+name: still
+services:
+  db:
+    build:
+      context: .
+      dockerfile: infrastructure/database.Dockerfile
+    environment:
+      POSTGRES_DB: still
+      POSTGRES_USER: still
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup.mjs first}
+    ports:
+      - '127.0.0.1:55432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U still -d still']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    restart: unless-stopped
+  migrate:
+    build:
+      context: .
+      dockerfile: infrastructure/api.Dockerfile
+    profiles: ['full']
+    command: ['node', 'migrate.mjs']
+    environment:
+      DATABASE_URL: postgres://still:${POSTGRES_PASSWORD}@db:5432/still
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: 'no'
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/api.Dockerfile
+    profiles: ['full']
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://still:${POSTGRES_PASSWORD}@db:5432/still
+      APP_ORIGIN: http://localhost:3000
+      RP_ID: localhost
+      RATE_LIMIT_KEY: ${RATE_LIMIT_KEY}
+      TRUST_PROXY_HOPS: '1'
+      MFA_ENABLED: 'false'
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs: ['/tmp']
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+  web:
+    build:
+      context: .
+      dockerfile: infrastructure/web.Dockerfile
+    profiles: ['full']
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      API_URL: http://api:4000
+    ports: ['127.0.0.1:3000:3000']
+    depends_on: ['api']
+    read_only: true
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+volumes:
+  postgres-data:

@@ -1,0 +1,97 @@
+name: still-production
+services:
+  db:
+    build:
+      context: ..
+      dockerfile: infrastructure/database.Dockerfile
+    environment:
+      POSTGRES_DB: still
+      POSTGRES_USER: still
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a production database password}
+    volumes: ['postgres-data:/var/lib/postgresql/data']
+    networks: ['backend']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U still -d still']
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+  migrate:
+    build:
+      context: ..
+      dockerfile: infrastructure/api.Dockerfile
+    command: ['node', 'migrate.mjs']
+    environment:
+      DATABASE_URL: postgres://still:${POSTGRES_PASSWORD}@db:5432/still
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: ['backend']
+    read_only: true
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: 'no'
+  api:
+    build:
+      context: ..
+      dockerfile: infrastructure/api.Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://still:${POSTGRES_PASSWORD}@db:5432/still
+      APP_ORIGIN: https://${DOMAIN:?Set the production domain}
+      RP_ID: ${DOMAIN}
+      TRUST_PROXY_HOPS: '1'
+      RATE_LIMIT_KEY: ${RATE_LIMIT_KEY:?Set a random 32-byte hex rate-limit key}
+      MFA_ENABLED: ${MFA_ENABLED:-false}
+      KMS_KEY_ID: ${KMS_KEY_ID:-}
+      AWS_REGION: ${AWS_REGION:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: ['backend']
+    read_only: true
+    tmpfs: ['/tmp']
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+  web:
+    build:
+      context: ..
+      dockerfile: infrastructure/web.Dockerfile
+    environment:
+      HOST: 0.0.0.0
+      API_URL: http://api:4000
+    networks: ['backend']
+    read_only: true
+    cap_drop: ['ALL']
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+  proxy:
+    build:
+      context: ..
+      dockerfile: infrastructure/proxy.Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN}
+      TLS_CONTACT_EMAIL: ${TLS_CONTACT_EMAIL:?Set certificate contact email}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes: ['./Caddyfile:/etc/caddy/Caddyfile:ro', 'caddy-data:/data', 'caddy-config:/config']
+    networks: ['backend']
+    depends_on:
+      api: { condition: service_healthy }
+      web: { condition: service_healthy }
+    read_only: true
+    tmpfs: ['/tmp']
+    cap_drop: ['ALL']
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: '0'
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+networks:
+  backend:
+volumes:
+  postgres-data:
+  caddy-data:
+  caddy-config:

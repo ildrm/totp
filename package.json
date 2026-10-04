@@ -1,0 +1,52 @@
+{
+  "name": "still-authenticator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-2.0-only",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @still/web dev",
+    "dev:api": "node --env-file=.env node_modules/tsx/dist/cli.mjs watch apps/api/src/main.ts",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "pnpm --filter @still/web build && pnpm --filter @still/api build",
+    "start": "pnpm --filter @still/web start",
+    "typecheck": "tsc --noEmit && pnpm --filter @still/api typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:containers": "node scripts/container-smoke.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "node scripts/run-migrations.mjs",
+    "setup": "node scripts/setup.mjs",
+    "start:api": "node scripts/run-api.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "security:audit": "pnpm audit --prod --audit-level=moderate",
+    "security:sbom": "node scripts/sbom.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "fast-check": "^4.10.2",
+    "pg": "8.23.1",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}

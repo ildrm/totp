@@ -1,0 +1,123 @@
+name: Verify and scan
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_USER: still
+          POSTGRES_DB: still
+          POSTGRES_PASSWORD: ci-only-synthetic-database
+        ports: ['55432:5432']
+        options: >-
+          --health-cmd "pg_isready -U still -d still"
+          --health-interval 5s --health-timeout 3s --health-retries 15
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_ENV: test
+      DATABASE_URL: postgres://still:ci-only-synthetic-database@127.0.0.1:55432/still
+      APP_ORIGIN: http://localhost:3000
+      RP_ID: localhost
+      RATE_LIMIT_KEY: '0000000000000000000000000000000000000000000000000000000000000001'
+      MFA_ENABLED: 'true'
+      MFA_DEV_KEY: '0000000000000000000000000000000000000000000000000000000000000002'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '24'
+      - run: npm install -g pnpm@11.25.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check && pnpm lint && pnpm typecheck
+      - run: pnpm build
+        env:
+          NODE_ENV: production
+      - run: node apps/api/migrate.mjs
+      - name: Start isolated API
+        run: |
+          node apps/api/dist/apps/api/src/main.js > /tmp/still-api-ci.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4000/api/health/ready > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo 'API readiness failed.'
+          exit 1
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - run: pnpm test:e2e
+        env:
+          NODE_ENV: production
+      - run: pnpm security:audit
+      - run: pnpm security:sbom
+      - run: node scripts/stage-security-scan.mjs
+      - name: Secret scan
+        run: >-
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges
+          -v "$PWD/artifacts/scanner-source:/src:ro"
+          zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          dir /src --config /src/.gitleaks.toml --redact=100 --no-banner
+      - name: Application SAST
+        run: >-
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges
+          -v "$PWD/artifacts/scanner-source:/src:ro" -w /src
+          semgrep/semgrep@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+          semgrep scan --config .semgrep.yml --metrics off --disable-version-check --error apps packages scripts
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: dependency-inventory
+          path: |
+            artifacts/still.cdx.json
+            docs/security/dependency-inventory.md
+          retention-days: 14
+  containers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - run: docker build -f infrastructure/api.Dockerfile -t still-api:ci .
+      - run: docker build -f infrastructure/web.Dockerfile -t still-web:ci .
+      - run: docker build -f infrastructure/database.Dockerfile -t still-database:ci .
+      - run: docker build -f infrastructure/proxy.Dockerfile -t still-proxy:ci .
+      - name: Export images without daemon access for scanners
+        run: |
+          mkdir -p artifacts/scans
+          docker save -o artifacts/api.tar still-api:ci
+          docker save -o artifacts/web.tar still-web:ci
+          docker save -o artifacts/database.tar still-database:ci
+          docker save -o artifacts/proxy.tar still-proxy:ci
+      - name: Update isolated advisory cache
+        run: >-
+          docker run --rm --memory=1g --cap-drop ALL --security-opt no-new-privileges
+          -e GRYPE_DB_CACHE_DIR=/grype-db -e GRYPE_CHECK_FOR_APP_UPDATE=false
+          -v still-grype-ci:/grype-db
+          ghcr.io/anchore/grype@sha256:5c88961f4130e830542d441c7ed6c78baa28e799163abac53d2be4923fb5ab7d
+          db update
+      - name: Scan runtime images
+        run: |
+          for image in api web database proxy; do
+            docker run --rm --network none --memory=1g --cap-drop ALL --security-opt no-new-privileges \
+              -e GRYPE_DB_CACHE_DIR=/grype-db -e GRYPE_DB_AUTO_UPDATE=false -e GRYPE_CHECK_FOR_APP_UPDATE=false \
+              -v still-grype-ci:/grype-db:ro -v "$PWD/artifacts/scans:/reports" \
+              -v "$PWD/artifacts/$image.tar:/image.tar:ro" \
+              ghcr.io/anchore/grype@sha256:5c88961f4130e830542d441c7ed6c78baa28e799163abac53d2be4923fb5ab7d \
+              docker-archive:/image.tar --fail-on high --output json --file "/reports/grype-$image.json"
+          done
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: runtime-vulnerability-reports
+          path: artifacts/scans/*.json
+          if-no-files-found: ignore
+          retention-days: 14

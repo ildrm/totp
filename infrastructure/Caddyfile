@@ -1,0 +1,16 @@
+{
+	email {$TLS_CONTACT_EMAIL}
+}
+
+{$DOMAIN} {
+	header Strict-Transport-Security "max-age=63072000; includeSubDomains"
+	request_body {
+		max_size 24MB
+	}
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,38 @@
+rules:
+  - id: still.no-dynamic-code
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Dynamic code execution crosses the vault security boundary.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+  - id: still.no-unsafe-html
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: User-controlled metadata must remain plain text.
+    pattern-either:
+      - pattern: <$TAG dangerouslySetInnerHTML={...} ... />
+      - pattern: $ELEMENT.innerHTML = $VALUE
+  - id: still.no-insecure-randomness
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Use platform cryptographic randomness in application code.
+    pattern: Math.random(...)
+  - id: still.no-browser-telemetry
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Do not send secret-bearing browser state to telemetry.
+    pattern-either:
+      - pattern: navigator.sendBeacon(...)
+      - pattern: console.$METHOD(...)
+  - id: still.no-interpolated-sql
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Database queries must use bound parameters.
+    patterns:
+      - pattern: $DB.query(`...${$EXPR}...`, ...)
+  - id: still.no-wildcard-cors
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Cookie-authenticated APIs must keep same-origin routing.
+    pattern: $APP.enableCors(...)

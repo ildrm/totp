@@ -1,0 +1,5 @@
+[extend]
+useDefault = true
+[allowlist]
+description = "Public RFC test fixtures and ephemeral CI examples are documented, never production credentials."
+paths = ['''tests[/\\]''', '''\.env\.example$''', '''pnpm-lock\.yaml$''']

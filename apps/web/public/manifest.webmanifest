@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Still Authenticator",
+  "short_name": "Still",
+  "description": "Private, encrypted authentication codes. Available offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f9fb",
+  "theme_color": "#7160cf",
+  "lang": "en",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

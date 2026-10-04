@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+  - packages/*
+
+minimumReleaseAge: 2880
+allowBuilds:
+  '@nestjs/core': true
+  '@swc/core': true
+  esbuild: true
+  sharp: true
